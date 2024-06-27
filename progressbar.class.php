@@ -51,155 +51,199 @@
  */
 class ProgressBar {
 
-    private $currentProgress;
-    private $endProgress;
-    private $currentTime;
+  private $currentProgress;
+  private $endProgress;
+  private $currentTime;
+  private $progressChar;
+  private $progressCharColor;
+  private $progressTrack;
+  private $progressTrackColor;
 
-    /**
-     * Constructor. Requires <strong>$endProgress</strong> param. 
-     * This param should be Integer value indicating, how many iterations 
-     * will loop, that this progress bar is used in, contain.
-     * 
-     * @param integer $endProgress end progress
-     * @throws InvalidArgumentException
-     */
-    public function __construct($endProgress)
-    {
-        if (!is_numeric($endProgress) || $endProgress < 1) {
-            throw new InvalidArgumentException('Provided end progress value should be numeric.');
-        }
-        $this->endProgress = $endProgress;
-        $this->currentTime = microtime(true);
+  /**
+   * Constructor. Requires <strong>$endProgress</strong> param. 
+   * This param should be Integer value indicating, how many iterations 
+   * will loop, that this progress bar is used in, contain.
+   * 
+   * @param integer $endProgress end progress
+   * @throws InvalidArgumentException
+   */
+  public function __construct(
+    $endProgress,
+    $progressChar       = "=",
+    $progressTrack      = " ",
+    $progressCharColor  = "default",
+    $progressTrackColor = "default"
+  ) {
+    if (!is_numeric($endProgress) || $endProgress < 1) {
+      throw new InvalidArgumentException('Provided end progress value should be numeric.');
     }
 
-    /**
-     * Returns current progress. <strong>$currentProgress</strong> 
-     * parameter is optional. If not provided, current progress 
-     * will be incremented by one.
-     * 
-     * @param int $currentProgress
-     * @return string
-     * @throws InvalidArgumentException
-     */
-    public function drawCurrentProgress($currentProgress = null)
-    {
-        if ($currentProgress !== null) {
-            if ($currentProgress < $this->currentProgress) {
-                throw new InvalidArgumentException("Provided current progress is smaller than previous one.");
-            } else {
-                $this->currentProgress = $currentProgress;
-            }
-        } else {
-            $this->currentProgress++;
-        }
+    $this->endProgress = $endProgress;
+    $this->currentTime = microtime(true);
+    $this->progressChar = $progressChar;
+    $this->progressTrack = $progressTrack;
+    $this->progressCharColor = $progressCharColor;
+    $this->progressTrackColor = $progressTrackColor;
+  }
 
-        $progress = $this->currentPercentage();
-        $maxWidth = $this->getTerminalWidth();
-        $etaNum = $this->getETA($progress);
-
-        return $this->buildBar($progress, $maxWidth, $etaNum);
+  /**
+   * Returns current progress. <strong>$currentProgress</strong> 
+   * parameter is optional. If not provided, current progress 
+   * will be incremented by one.
+   * 
+   * @param int $currentProgress
+   * @return string
+   * @throws InvalidArgumentException
+   */
+  public function drawCurrentProgress($currentProgress = null) {
+    if ($currentProgress !== null) {
+      if ($currentProgress < $this->currentProgress) {
+        throw new InvalidArgumentException("Provided current progress is smaller than previous one.");
+      }
+      else {
+        $this->currentProgress = $currentProgress;
+      }
+    }
+    else {
+      $this->currentProgress++;
     }
 
-    /**
-     * Calculates current percentage
-     * @return int
-     */
-    private function currentPercentage()
-    {
-        $progress = $this->currentProgress / $this->endProgress;
+    $progress = $this->currentPercentage();
+    $maxWidth = $this->getTerminalWidth();
+    $etaNum = $this->getETA($progress);
 
-        return $progress * 100;
+    return $this->buildBar($progress, $maxWidth, $etaNum);
+  }
+
+  private function color(string $color, string $text) {
+    $colors = [
+      "black"         => "\033[0;30m",
+      "red"           => "\033[0;31m",
+      "light-red"     => "\033[1;31m",
+      "green"         => "\033[0;32m",
+      "light-green"   => "\033[1;32m",
+      "brown"         => "\033[0;33m",
+      "orange"        => "\033[0;33m",
+      "blue"          => "\033[0;34m",
+      "light-blue"    => "\033[1;34m",
+      "purple"        => "\033[0;35m",
+      "light-purple"  => "\033[1;35m",
+      "cyan"          => "\033[0;36m",
+      "light-cyan"    => "\033[1;36m",
+      "light-gray"    => "\033[0;37m",
+      "dark-gray"     => "\033[1;30m",
+      "yellow"        => "\033[1;33m",
+      "white"         => "\033[1;37m",
+      "default"       => "\033[0m",
+    ];
+  
+    if (!array_key_exists($color, $colors)) $color = $colors["default"];
+  
+    return $colors[$color] . "{$text}" . $colors['default'];
+  }
+
+  /**
+   * Calculates current percentage
+   * @return int
+   */
+  private function currentPercentage() {
+    $progress = $this->currentProgress / $this->endProgress;
+
+    return $progress * 100;
+  }
+
+  /**
+   * Builds progress bar row using provided data
+   * 
+   * @param int $progress
+   * @param int $maxWidth
+   * @param string $etaNum
+   * @return string
+   */
+  private function buildBar($progress, $maxWidth, $etaNum) {
+    $eta = $etaNum ? '(ETA: ' . $etaNum . ')' : '';
+    $percentage = number_format($progress, 2) . "%";
+    $widthLeft = $maxWidth - 1 - strlen($eta) - 1 - strlen($percentage) - 2;
+    $prgDone = ceil($widthLeft * ($progress / 100));
+    $prgNotDone = $widthLeft - $prgDone;
+    $out = "[" . str_repeat($this->color($this->progressCharColor, $this->progressChar), $prgDone) . str_repeat($this->color($this->progressTrackColor, $this->progressTrack), $prgNotDone) . '] ' . $percentage . ' ' . $eta;
+
+    return "\r{$out}";
+  }
+
+  /**
+   * Returns terminal width
+   * 
+   * @return int
+   */
+  private function getTerminalWidth() {
+    switch (PHP_OS_FAMILY) {
+      case "Windows":
+        return (int) exec('%SYSTEMROOT%\System32\WindowsPowerShell\v1.0\powershell.exe -Command "$Host.UI.RawUI.WindowSize.Width"');
+      case 'Darwin':
+        return (int) exec('/bin/stty/ size | cut -d" " -f2');
+      case 'Linux':
+        return (int) exec('/usr/bin/env tput cols');
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Calculates and returns ETA with human timing formatting
+   * 
+   * @param int $progress
+   * @return string
+   */
+  private function getETA($progress) {
+    $currTime = microtime(true);
+
+    if (!$progress || $progress <= 0 || $progress === false) {
+      return "";
     }
 
-    /**
-     * Builds progress bar row using provided data
-     * 
-     * @param int $progress
-     * @param int $maxWidth
-     * @param string $etaNum
-     * @return string
-     */
-    private function buildBar($progress, $maxWidth, $etaNum)
-    {
-        $eta = $etaNum ? '(ETA: ' . $etaNum . ')' : '';
-        $percentage = number_format($progress, 2) . "%";
-
-        $widthLeft = $maxWidth - 1 - strlen($eta) - 1 - strlen($percentage) - 2;
-
-
-        $prgDone = ceil($widthLeft * ($progress / 100));
-        $prgNotDone = $widthLeft - $prgDone;
-
-        $out = "[" . str_repeat("=", $prgDone) . str_repeat(" ", $prgNotDone) . '] ' . $percentage . ' ' . $eta;
-
-        return "\r" . $out;
+    try {
+      $etaTime = (($currTime - $this->currentTime) / $progress) * (100 - $progress);
+      $diff = ceil($etaTime);
+      $eta = $this->humanTiming($diff);
+    }
+    catch (Exception $ex) {
+      $eta = '';
     }
 
-    /**
-     * Returns terminal width
-     * 
-     * @return int
-     */
-    private function getTerminalWidth()
-    {
-        return exec('tput cols');
+    return $eta;
+  }
+
+  /**
+   * Converts numeric time to human-readable format
+   * 
+   * @param int $time
+   * @return string
+   */
+  private function humanTiming($time) {
+    $tokens = [
+      31536000 => ['year', 'years'],
+      2592000 => ['month', 'months'],
+      604800 => ['week', 'weeks'],
+      86400 => ['day', 'days'],
+      3600 => ['hour', 'hours'],
+      60 => ['minute', 'minutes'],
+      1 => ['second', 'seconds']
+    ];
+
+    $result = '';
+
+    foreach ($tokens as $unit => $labels) {
+      if ($time < $unit) continue;
+
+      $numberOfUnits = floor($time / $unit);
+      $label = $numberOfUnits === 1 ? $labels[0] : $labels[1];
+
+      $result .= ($result ? ' ' : '') . $numberOfUnits . ' ' . $label;
+      $time -= $numberOfUnits * $unit;
     }
 
-    /**
-     * Calculates and returns ETA with human timing formatting
-     * 
-     * @param int $progress
-     * @return string
-     */
-    private function getETA($progress)
-    {
-
-
-        $currTime = microtime(true);
-
-        if (!$progress || $progress <= 0 || $progress === false) {
-            return "";
-        }
-
-        try {
-            $etaTime = (($currTime - $this->currentTime) / $progress) * (100 - $progress);
-
-            $diff = ceil($etaTime);
-
-            $eta = $this->humanTiming($diff);
-        } catch (Exception $ex) {
-            $eta = '';
-        }
-
-        return $eta;
-    }
-
-    /**
-     * Converts numeric time to human-readable format
-     * 
-     * @param int $time
-     * @return string
-     */
-    private function humanTiming($time)
-    {
-
-        $tokens = array(
-            31536000 => 'y',
-            2592000 => 'mo',
-            604800 => 'w',
-            86400 => 'd',
-            3600 => 'h',
-            60 => 'm',
-            1 => 's'
-        );
-
-        foreach ($tokens as $unit => $text) {
-            if ($time < $unit) {
-                continue;
-            }
-            $numberOfUnits = floor($time / $unit);
-            return $numberOfUnits . '' . $text;
-        }
-    }
+    return $result ?: '0 seconds';
+  }
 
 }
